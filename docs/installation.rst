@@ -14,6 +14,21 @@ Installation
 7. Run ``python manage.py syncdb`` (or ``migrate``) and browse to
    ``/account/sessions/``.
 
+Limiting active sessions
+------------------------
+By default there is no limit on the number of sessions a single user can have
+active at the same time. Set ``SESSION_ACTIVE_LIMIT`` in your settings file to
+a positive integer to cap the number of active (non-expired) sessions per
+user::
+
+    SESSION_ACTIVE_LIMIT = 5
+
+When a new authenticated session is created and the user already has the
+maximum number of active sessions, the oldest active session(s) of that user
+are evicted atomically, so the limit is never exceeded even when sessions are
+created concurrently. Anonymous sessions are not limited. A missing setting
+or any non-positive value disables the limit.
+
 System check framework
 ----------------------
 

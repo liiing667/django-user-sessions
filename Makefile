@@ -17,6 +17,9 @@ generate-mmdb-fixtures:
 	docker --context=default buildx build -f tests/Dockerfile --tag test-mmdb-maker tests
 	docker run --rm --volume $$(pwd)/tests:/data test-mmdb-maker
 
+generate-mmdb-fixtures-python:
+	PYTHONPATH=. python tests/generate_mmdb.py
+
 test: generate-mmdb-fixtures
 	DJANGO_SETTINGS_MODULE=tests.settings PYTHONPATH=. \
 		django-admin.py test ${TARGET}

@@ -8,6 +8,12 @@ Middleware
 Models
 ------
 .. autoclass:: user_sessions.models.Session
+.. autoclass:: user_sessions.models.UserSessionGeneration
+
+Utilities
+---------
+.. automodule:: user_sessions.utils
+   :members:
 
 Session Backends
 ----------------

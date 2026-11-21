@@ -21,6 +21,35 @@ You could logout the user everywhere::
     user.session_set.all().delete()
 
 
+Invalidating sessions on credential changes
+-------------------------------------------
+When a user's credentials change -- for example an administrator resets their
+password or revokes a role -- any sessions that were created before the
+change should no longer be trusted. Every session stores the user's *session
+generation* at the time it is written; bumping that generation invalidates
+all older sessions, which are then rejected on the next request::
+
+    from django.db import transaction
+    from user_sessions.utils import invalidate_user_sessions
+
+    with transaction.atomic():
+        user.set_password(new_password)
+        user.save()
+        invalidate_user_sessions(user)
+
+Call :func:`~user_sessions.utils.invalidate_user_sessions` inside the same
+``transaction.atomic()`` block as the credential change, so the invalidation
+is committed atomically together with it.
+
+To keep specific active sessions alive (for example the session the
+administrator is currently using), pass their session keys::
+
+    invalidate_user_sessions(user, keep_session_keys=[request.session.session_key])
+
+Anonymous sessions and expired sessions are not affected by the generation
+check.
+
+
 Generic views
 -------------
 There are two views included with this application,

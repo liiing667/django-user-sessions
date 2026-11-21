@@ -1,6 +1,8 @@
 from django.contrib import auth
 from django.contrib.sessions.backends.db import SessionStore as DBStore
 
+from ..utils import get_session_generation
+
 
 class SessionStore(DBStore):
     """
@@ -12,6 +14,7 @@ class SessionStore(DBStore):
         self.user_agent = user_agent[:200] if user_agent else user_agent
         self.ip = ip
         self.user_id = None
+        self._session_generation = None
 
     # Used by superclass to get self.model, which is used elsewhere
     @classmethod
@@ -25,11 +28,23 @@ class SessionStore(DBStore):
     def __setitem__(self, key, value):
         if key == auth.SESSION_KEY:
             self.user_id = value
+            self._session_generation = None
         super().__setitem__(key, value)
 
     # Used in DBStore.load()
     def _get_session_from_db(self):
         s = super()._get_session_from_db()
+        if s is None:
+            return None
+        if s.user_id is not None:
+            generation = get_session_generation(s.user_id)
+            if s.session_generation < generation:
+                # The user's credentials were changed after this session was
+                # stored; reject the session and remove it.
+                s.delete()
+                self._session_key = None
+                return None
+            self._session_generation = generation
         self.user_id = s.user_id
         # do not overwrite user_agent/ip, as those might have been updated
         if self.user_agent != s.user_agent or self.ip != s.ip:
@@ -54,8 +69,17 @@ class SessionStore(DBStore):
             user_agent=self.user_agent,
             user_id=self.user_id,
             ip=self.ip,
+            session_generation=self._get_session_generation(),
         )
+
+    def _get_session_generation(self):
+        if self.user_id is None:
+            return self.model._meta.get_field('session_generation').default
+        if self._session_generation is None:
+            self._session_generation = get_session_generation(self.user_id)
+        return self._session_generation
 
     def clear(self):
         super().clear()
         self.user_id = None
+        self._session_generation = None

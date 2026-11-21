@@ -52,6 +52,16 @@ Or logout the user everywhere:
 
     user.session_set.all().delete()
 
+After credential changes (e.g. a password reset or role revocation),
+invalidate the user's existing sessions atomically with the change, keeping
+the current session alive:
+
+.. code-block:: python
+
+    from user_sessions.utils import invalidate_user_sessions
+
+    invalidate_user_sessions(user, keep_session_keys=[request.session.session_key])
+
 The user's IP address and user agent are also stored on the session. This
 allows to show a list of active sessions to the user in the admin:
 

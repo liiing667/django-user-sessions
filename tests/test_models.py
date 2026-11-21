@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 
 from user_sessions.backends.db import SessionStore
-from user_sessions.models import Session
+from user_sessions.models import Session, SessionRevocationEvent
 
 
 class ModelTest(TestCase):
@@ -28,3 +28,35 @@ class ModelTest(TestCase):
 
         session = Session.objects.get(pk=store.session_key)
         self.assertEqual(session.user_agent, ua[:200])
+
+
+class SessionRevocationEventModelTest(TestCase):
+    def test_outcome_helpers_and_str(self):
+        event = SessionRevocationEvent.objects.create(
+            batch_id='batch-1',
+            session_key='KEY',
+            outcome=SessionRevocationEvent.OUTCOME_FAILED,
+            stage=SessionRevocationEvent.STAGE_DELETE,
+            detail='DatabaseError: boom',
+        )
+        self.assertTrue(event.is_failed)
+        self.assertFalse(event.is_revoked)
+        self.assertFalse(event.is_retained)
+        text = str(event)
+        self.assertIn('KEY', text)
+        self.assertIn('failed', text)
+        self.assertIn('delete', text)
+
+        event.outcome = SessionRevocationEvent.OUTCOME_REVOKED
+        self.assertTrue(event.is_revoked)
+        event.outcome = SessionRevocationEvent.OUTCOME_RETAINED
+        self.assertTrue(event.is_retained)
+
+    def test_default_detail_is_blank(self):
+        event = SessionRevocationEvent.objects.create(
+            batch_id='batch-2',
+            session_key='KEY',
+            outcome=SessionRevocationEvent.OUTCOME_REVOKED,
+            stage=SessionRevocationEvent.STAGE_COMMIT,
+        )
+        self.assertEqual(event.detail, '')

@@ -6,6 +6,7 @@ from django.contrib.sessions.backends.base import CreateError
 from django.test import TestCase
 from django.utils.timezone import now
 
+from user_sessions.revocation import revoke_sessions
 from user_sessions.backends.db import SessionStore
 from user_sessions.models import Session
 
@@ -97,3 +98,68 @@ class SessionStoreTest(TestCase):
 
         session = Session.objects.get(pk=self.store.session_key)
         self.assertEqual(session.user_id, None)
+
+    def test_anonymous_session_is_untouched_by_revocation_querysets(self):
+        """
+        Anonymous sessions have no user and must therefore be invisible to
+        the owner-scoped querysets used by batch revocation.
+        """
+        anonymous = SessionStore(user_agent='Anon/1.0', ip='10.0.0.9')
+        anonymous['cart'] = ['item-1']
+        anonymous.save()
+
+        user_qs = User.objects.get(pk=1).session_set.filter(
+            expire_date__gt=now())
+        report = revoke_sessions(user_qs, [anonymous.session_key])
+
+        # The anonymous row is outside the queryset, so it is reconciled as
+        # absent but must physically remain available to its visitor.
+        self.assertTrue(
+            Session.objects.filter(pk=anonymous.session_key).exists())
+        self.assertEqual(
+            Session.objects.get(pk=anonymous.session_key).get_decoded(),
+            {'cart': ['item-1']},
+        )
+        self.assertEqual(report.outcome_of(anonymous.session_key).stage,
+                         'query')
+
+    def test_expiry_is_respected_throughout_revocation(self):
+        """Sessions whose expiry passed are excluded, mirroring the views."""
+        expired = SessionStore(user_agent='Old/1.0', ip='10.0.0.10')
+        expired.set_expiry(-1)
+        expired[auth.SESSION_KEY] = 1
+        expired.save()
+
+        active_qs = User.objects.get(pk=1).session_set.filter(
+            expire_date__gt=now())
+        report = revoke_sessions(active_qs, [expired.session_key])
+        self.assertTrue(
+            Session.objects.filter(pk=expired.session_key).exists())
+        self.assertEqual(
+            report.outcome_of(expired.session_key).outcome, 'revoked')
+
+    def test_rolling_update_survives_revocation_of_sibling_sessions(self):
+        """
+        Deleting sibling devices must not clobber the rolling metadata
+        (user agent / ip / last activity) of the surviving current session.
+        """
+        current = SessionStore(user_agent='Browser/9', ip='10.0.0.11')
+        current[auth.SESSION_KEY] = 1
+        current.save()
+        sibling = SessionStore(user_agent='Browser/8', ip='10.0.0.12')
+        sibling[auth.SESSION_KEY] = 1
+        sibling.save()
+
+        user_qs = User.objects.get(pk=1).session_set.filter(
+            expire_date__gt=now())
+        report = revoke_sessions(
+            user_qs, [sibling.session_key],
+            current_session_key=current.session_key)
+
+        self.assertEqual(report.retained_session_keys,
+                         {current.session_key})
+        survivor = Session.objects.get(pk=current.session_key)
+        self.assertEqual(survivor.user_agent, 'Browser/9')
+        self.assertEqual(survivor.ip, '10.0.0.11')
+        self.assertAlmostEqual(now(), survivor.last_activity,
+                               delta=timedelta(seconds=5))

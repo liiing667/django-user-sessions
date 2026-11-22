@@ -4,14 +4,17 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, resolve_url
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
-from django.utils.timezone import now
 from django.views.generic import ListView, View
 from django.views.generic.detail import BaseDetailView
 from django.views.generic.edit import DeletionMixin
 
+from .utils import now
+
 
 class SessionMixin:
     def get_queryset(self):
+        # Consumed with the same shared clock and the same generation
+        # marker (last_activity) that request renewal writes.
         return self.request.user.session_set\
             .filter(expire_date__gt=now()).order_by('-last_activity')
 

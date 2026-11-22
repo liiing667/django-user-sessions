@@ -1,6 +1,18 @@
 Release Notes
 =============
 
+unreleased
+----------
+* Security: an expired session can no longer be revived by a late write
+  racing background cleanup or another instance. Request renewal now uses a
+  single conditional, atomic write: afterwards a session is either fully
+  valid or fully invalid, never in between.
+* ``last_activity`` is now a monotonic generation marker (no longer
+  ``auto_now``): a clock jumping backwards, e.g. after suspending and
+  resuming a machine, cannot move it backwards.
+* The expiry bound, request renewal, background cleanup and the session
+  list now share a single clock (``user_sessions.utils.now``).
+
 2.0.0
 ----------
 * New: Support for Django 3.2 and 4.0

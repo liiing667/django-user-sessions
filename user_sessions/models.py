@@ -5,10 +5,21 @@ from django.contrib.sessions.base_session import (
 from django.db import models
 
 from .backends.db import SessionStore
+from .utils import now
 
 
 class SessionManager(BaseSessionManager):
     use_in_migrations = True
+
+    def clear_expired(self):
+        """
+        Remove expired sessions.
+
+        Uses the same shared clock as request renewal and the session list,
+        so background cleanup can never disagree with them about which
+        sessions are expired.
+        """
+        return self.filter(expire_date__lt=now()).delete()
 
 
 # https://docs.djangoproject.com/en/4.2/topics/http/sessions/#extending-database-backed-session-engines
@@ -28,7 +39,11 @@ class Session(AbstractBaseSession):
     user = models.ForeignKey(getattr(settings, 'AUTH_USER_MODEL', 'auth.User'),
                              null=True, on_delete=models.CASCADE)
     user_agent = models.CharField(null=True, blank=True, max_length=200)
-    last_activity = models.DateTimeField(auto_now=True)
+    # Generation marker shared by request renewal (writer) and the session
+    # list (reader). A plain default instead of ``auto_now`` so the session
+    # store can keep it monotonic: a clock jumping backwards (suspend/resume)
+    # must not move the last activity backwards.
+    last_activity = models.DateTimeField(default=now)
     ip = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP')
 
     objects = SessionManager()

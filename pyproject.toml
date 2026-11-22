@@ -64,6 +64,9 @@ dev = [
 exclude = ["user_sessions/migrations/*.py"]
 line-length = 100
 
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+
 [tool.setuptools]
 packages = ["user_sessions"]
 

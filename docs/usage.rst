@@ -21,6 +21,31 @@ You could logout the user everywhere::
     user.session_set.all().delete()
 
 
+Revoking sessions
+-----------------
+The session list is a snapshot: by the time a delete request is submitted,
+another request may have re-authenticated one of the listed sessions to a
+different user or let it expire. The delete views therefore freeze the
+requesting user, the current device and the target session as soon as the
+request enters the view, and re-check the ownership of every selected
+session right before it is deleted. A cross-user identifier can never race
+into the queryset, the current device and all anonymous sessions are always
+preserved, and expired sessions stay filtered out.
+
+The outcome is classified as kept / revoked / expired and is keyed by
+session key -- the stable identity of a device -- so consumers running
+after a restart observe the same object identity::
+
+    from user_sessions.revocation import revoke_sessions
+
+    report = revoke_sessions(user, ['SESSION-KEY'], current_session_key='CURRENT')
+    report.kept_session_keys     # current device, anonymous and foreign sessions
+    report.revoked_session_keys  # sessions that were actually deleted
+    report.expired_session_keys  # sessions that had already expired
+
+The delete views expose the same report as ``revocation_report`` on the
+view and on the redirect response.
+
 Generic views
 -------------
 There are two views included with this application,

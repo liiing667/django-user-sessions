@@ -62,7 +62,7 @@ class Client(BaseClient):
         session_cookie = self.cookies.get(settings.SESSION_COOKIE_NAME)
         if session_cookie:
             if self.session:
-                self.session.delete(session_cookie)
+                self.session.flush()
             del self.cookies[settings.SESSION_COOKIE_NAME]
 
     def _session(self):
